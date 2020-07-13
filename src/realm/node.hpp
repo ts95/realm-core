@@ -306,6 +306,7 @@ private:
 };
 
 class Spec;
+class Mixed;
 
 /// Base class for all nodes holding user data
 class ArrayPayload {
@@ -318,6 +319,7 @@ public:
         return false;
     }
     virtual void set_spec(Spec*, size_t) const {}
+    virtual Mixed get_any(size_t) const;
 };
 
 

@@ -925,21 +925,20 @@ bool Query::eval_object(ConstObj& obj) const
 }
 
 
-template <Action action, typename T, typename R>
-R Query::aggregate(ColKey column_key, size_t* resultcount, ObjKey* return_ndx) const
+template <typename T>
+void Query::aggregate(QueryStateBase& st, ColKey column_key, size_t* resultcount, ObjKey* return_ndx) const
 {
     using LeafType = typename ColumnTypeTraits<T>::cluster_leaf_type;
-    using ResultType = typename AggregateResultType<T, action>::result_type;
 
     if (!has_conditions() && !m_view) {
         // use table aggregate
-        return m_table.unchecked_ptr()->aggregate<action, T, R>(column_key, T{}, resultcount, return_ndx);
+        // return m_table.unchecked_ptr()->aggregate<action, T, R>(column_key, T{}, resultcount, return_ndx);
+        return;
     }
     else {
 
         // Aggregate with criteria - goes through the nodes in the query system
         init();
-        QueryState<ResultType> st(action);
 
         if (!m_view) {
             auto pn = root_node();
@@ -947,7 +946,7 @@ R Query::aggregate(ColKey column_key, size_t* resultcount, ObjKey* return_ndx) c
             if (node->has_search_index()) {
                 node->index_based_aggregate(size_t(-1), [&](ConstObj& obj) -> bool {
                     if (eval_object(obj)) {
-                        st.template match<action, false>(size_t(obj.get_key().value), 0, obj.get<T>(column_key));
+                        st.match(size_t(obj.get_key().value), obj.get<T>(column_key));
                         return true;
                     }
                     else {
@@ -959,10 +958,6 @@ R Query::aggregate(ColKey column_key, size_t* resultcount, ObjKey* return_ndx) c
                 // no index, traverse cluster tree
                 node = pn;
                 LeafType leaf(m_table.unchecked_ptr()->get_alloc());
-                bool nullable = m_table->is_nullable(column_key);
-
-                for (size_t c = 0; c < node->m_children.size(); c++)
-                    node->m_children[c]->aggregate_local_prepare(action, ColumnTypeTraits<T>::id, nullable);
 
                 auto f = [column_key, &leaf, &node, &st, this](const Cluster* cluster) {
                     size_t e = cluster->node_size();
@@ -982,7 +977,7 @@ R Query::aggregate(ColKey column_key, size_t* resultcount, ObjKey* return_ndx) c
             for (size_t t = 0; t < m_view->size(); t++) {
                 ConstObj obj = m_view->get_object(t);
                 if (eval_object(obj)) {
-                    st.template match<action, false>(size_t(obj.get_key().value), 0, obj.get<T>(column_key));
+                    st.match(size_t(obj.get_key().value), obj.get<T>(column_key));
                 }
             }
         }
@@ -994,8 +989,6 @@ R Query::aggregate(ColKey column_key, size_t* resultcount, ObjKey* return_ndx) c
         if (return_ndx) {
             *return_ndx = st.m_minmax_index;
         }
-
-        return st.m_state;
     }
 }
 
@@ -1052,10 +1045,14 @@ int64_t Query::sum_int(ColKey column_key) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Sum);
 #endif
 
+    QueryStateSum<int64_t> st;
     if (m_table->is_nullable(column_key)) {
-        return aggregate<act_Sum, util::Optional<int64_t>, int64_t>(column_key);
+        aggregate<util::Optional<int64_t>>(st, column_key);
     }
-    return aggregate<act_Sum, int64_t, int64_t>(column_key);
+    else {
+        aggregate<int64_t>(st, column_key);
+    }
+    return st.m_state;
 }
 double Query::sum_float(ColKey column_key) const
 {
@@ -1063,15 +1060,18 @@ double Query::sum_float(ColKey column_key) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Sum);
 #endif
 
-    return aggregate<act_Sum, float, double>(column_key);
+    QueryStateSum<double> st;
+    aggregate<float>(st, column_key);
+    return st.m_state;
 }
 double Query::sum_double(ColKey column_key) const
 {
 #if REALM_METRICS
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Sum);
 #endif
-
-    return aggregate<act_Sum, double, double>(column_key);
+    QueryStateSum<double> st;
+    aggregate<double>(st, column_key);
+    return st.m_state;
 }
 
 Decimal128 Query::sum_decimal128(ColKey column_key) const
@@ -1080,7 +1080,9 @@ Decimal128 Query::sum_decimal128(ColKey column_key) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Sum);
 #endif
 
-    return aggregate<act_Sum, Decimal128, Decimal128>(column_key);
+    QueryStateSum<Decimal128> st;
+    aggregate<Decimal128>(st, column_key);
+    return st.m_state;
 }
 
 // Maximum
@@ -1091,10 +1093,14 @@ int64_t Query::maximum_int(ColKey column_key, ObjKey* return_ndx) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Maximum);
 #endif
 
+    QueryStateMax<int64_t> st;
     if (m_table->is_nullable(column_key)) {
-        return aggregate<act_Max, util::Optional<int64_t>, int64_t>(column_key, nullptr, return_ndx);
+        aggregate<util::Optional<int64_t>>(st, column_key, nullptr, return_ndx);
     }
-    return aggregate<act_Max, int64_t, int64_t>(column_key, nullptr, return_ndx);
+    else {
+        aggregate<int64_t>(st, column_key, nullptr, return_ndx);
+    }
+    return st.m_state;
 }
 
 float Query::maximum_float(ColKey column_key, ObjKey* return_ndx) const
@@ -1103,7 +1109,9 @@ float Query::maximum_float(ColKey column_key, ObjKey* return_ndx) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Maximum);
 #endif
 
-    return aggregate<act_Max, float, float>(column_key, nullptr, return_ndx);
+    QueryStateMax<float> st;
+    aggregate<float>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 double Query::maximum_double(ColKey column_key, ObjKey* return_ndx) const
 {
@@ -1111,7 +1119,9 @@ double Query::maximum_double(ColKey column_key, ObjKey* return_ndx) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Maximum);
 #endif
 
-    return aggregate<act_Max, double, double>(column_key, nullptr, return_ndx);
+    QueryStateMax<double> st;
+    aggregate<double>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 
 Decimal128 Query::maximum_decimal128(ColKey column_key, ObjKey* return_ndx) const
@@ -1120,7 +1130,9 @@ Decimal128 Query::maximum_decimal128(ColKey column_key, ObjKey* return_ndx) cons
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Maximum);
 #endif
 
-    return aggregate<act_Max, Decimal128, Decimal128>(column_key, nullptr, return_ndx);
+    QueryStateMax<Decimal128> st;
+    aggregate<Decimal128>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 
 
@@ -1132,10 +1144,14 @@ int64_t Query::minimum_int(ColKey column_key, ObjKey* return_ndx) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Minimum);
 #endif
 
+    QueryStateMin<int64_t> st;
     if (m_table->is_nullable(column_key)) {
-        return aggregate<act_Min, util::Optional<int64_t>, int64_t>(column_key, nullptr, return_ndx);
+        aggregate<util::Optional<int64_t>>(st, column_key, nullptr, return_ndx);
     }
-    return aggregate<act_Min, int64_t, int64_t>(column_key, nullptr, return_ndx);
+    else {
+        aggregate<int64_t>(st, column_key, nullptr, return_ndx);
+    }
+    return st.m_state;
 }
 float Query::minimum_float(ColKey column_key, ObjKey* return_ndx) const
 {
@@ -1143,7 +1159,9 @@ float Query::minimum_float(ColKey column_key, ObjKey* return_ndx) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Minimum);
 #endif
 
-    return aggregate<act_Min, float, float>(column_key, nullptr, return_ndx);
+    QueryStateMin<float> st;
+    aggregate<float>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 double Query::minimum_double(ColKey column_key, ObjKey* return_ndx) const
 {
@@ -1151,7 +1169,9 @@ double Query::minimum_double(ColKey column_key, ObjKey* return_ndx) const
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Minimum);
 #endif
 
-    return aggregate<act_Min, double, double>(column_key, nullptr, return_ndx);
+    QueryStateMin<double> st;
+    aggregate<double>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 
 Timestamp Query::minimum_timestamp(ColKey column_key, ObjKey* return_ndx)
@@ -1160,7 +1180,9 @@ Timestamp Query::minimum_timestamp(ColKey column_key, ObjKey* return_ndx)
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Minimum);
 #endif
 
-    return aggregate<act_Min, Timestamp, Timestamp>(column_key, nullptr, return_ndx);
+    QueryStateMin<Timestamp> st;
+    aggregate<Timestamp>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 
 Decimal128 Query::minimum_decimal128(ColKey column_key, ObjKey* return_ndx) const
@@ -1169,7 +1191,9 @@ Decimal128 Query::minimum_decimal128(ColKey column_key, ObjKey* return_ndx) cons
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Minimum);
 #endif
 
-    return aggregate<act_Min, Decimal128, Decimal128>(column_key, nullptr, return_ndx);
+    QueryStateMin<Decimal128> st;
+    aggregate<Decimal128>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 
 Timestamp Query::maximum_timestamp(ColKey column_key, ObjKey* return_ndx)
@@ -1178,7 +1202,9 @@ Timestamp Query::maximum_timestamp(ColKey column_key, ObjKey* return_ndx)
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Maximum);
 #endif
 
-    return aggregate<act_Max, Timestamp, Timestamp>(column_key, nullptr, return_ndx);
+    QueryStateMax<Timestamp> st;
+    aggregate<Timestamp>(st, column_key, nullptr, return_ndx);
+    return st.m_state;
 }
 
 
@@ -1192,7 +1218,9 @@ double Query::average(ColKey column_key, size_t* resultcount) const
 #endif
     using ResultType = typename AggregateResultType<T, act_Sum>::result_type;
     size_t resultcount2 = 0;
-    auto sum1 = aggregate<act_Sum, T, ResultType>(column_key, &resultcount2);
+    QueryStateSum<ResultType> st;
+    aggregate<T>(st, column_key, &resultcount2);
+    auto sum1 = st.m_state;
     double avg1 = 0;
     if (resultcount2 != 0)
         avg1 = static_cast<double>(sum1) / resultcount2;
@@ -1228,7 +1256,9 @@ Decimal128 Query::average_decimal128(ColKey column_key, size_t* resultcount) con
     std::unique_ptr<MetricTimer> metric_timer = QueryInfo::track(this, QueryInfo::type_Average);
 #endif
     size_t resultcount2 = 0;
-    auto sum1 = aggregate<act_Sum, Decimal128, Decimal128>(column_key, &resultcount2);
+    QueryStateSum<Decimal128> st;
+    aggregate<Decimal128>(st, column_key, &resultcount2);
+    auto sum1 = st.m_state;
     Decimal128 avg1;
     if (resultcount2 != 0)
         avg1 = sum1 / resultcount2;
@@ -1430,9 +1460,6 @@ void Query::find_all(ConstTableView& ret, size_t begin, size_t end, size_t limit
             node = pn;
             QueryState<int64_t> st(act_FindAll, &ret.m_key_values, limit);
 
-            for (size_t c = 0; c < node->m_children.size(); c++)
-                node->m_children[c]->aggregate_local_prepare(act_FindAll, type_Int, false);
-
             auto f = [&begin, &end, &node, &st, this](const Cluster* cluster) {
                 size_t e = cluster->node_size();
                 if (begin < e) {
@@ -1515,10 +1542,7 @@ size_t Query::do_count(size_t limit) const
         }
         // no index, descend down the B+-tree instead
         node = pn;
-        QueryState<int64_t> st(act_Count, limit);
-
-        for (size_t c = 0; c < node->m_children.size(); c++)
-            node->m_children[c]->aggregate_local_prepare(act_Count, type_Int, false);
+        QueryStateCount st(limit);
 
         auto f = [&node, &st, this](const Cluster* cluster) {
             size_t e = cluster->node_size();
@@ -1532,7 +1556,7 @@ size_t Query::do_count(size_t limit) const
 
         m_table->traverse_clusters(f);
 
-        cnt = size_t(st.m_state);
+        cnt = st.get_count();
     }
 
     return cnt;

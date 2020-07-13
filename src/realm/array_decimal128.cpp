@@ -73,6 +73,11 @@ void ArrayDecimal128::move(ArrayDecimal128& dst_arr, size_t ndx)
     truncate(ndx);
 }
 
+Mixed ArrayDecimal128::get_any(size_t ndx) const
+{
+    return get(ndx);
+}
+
 size_t ArrayDecimal128::find_first(Decimal128 value, size_t start, size_t end) const noexcept
 {
     auto sz = size();

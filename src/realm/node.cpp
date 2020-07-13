@@ -18,6 +18,7 @@
 
 #include <realm/node.hpp>
 #include <realm/utilities.hpp>
+#include <realm/mixed.hpp>
 
 #if REALM_ENABLE_MEMDEBUG
 #include <cstring>
@@ -164,4 +165,11 @@ void Node::do_copy_on_write(size_t minimum_size)
     // Mark original as deleted, so that the space can be reclaimed in
     // future commits, when no versions are using it anymore
     m_alloc.free_(old_ref, old_begin);
+}
+
+ArrayPayload::~ArrayPayload() {}
+
+Mixed ArrayPayload::get_any(size_t) const
+{
+    return {};
 }
