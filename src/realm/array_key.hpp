@@ -63,6 +63,11 @@ public:
         Array::set_parent(parent, ndx_in_parent);
     }
 
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
+    }
+
     void create()
     {
         Array::create(type_Normal);

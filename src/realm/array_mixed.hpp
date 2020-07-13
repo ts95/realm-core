@@ -69,6 +69,11 @@ public:
         ArrayMixed::init_from_ref(ref);
     }
 
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
+    }
+
     size_t size() const
     {
         return m_composite.size();

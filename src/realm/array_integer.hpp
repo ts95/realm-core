@@ -51,7 +51,10 @@ public:
     {
         Array::set_parent(parent, ndx_in_parent);
     }
-
+    Mixed get_any(size_t ndx) const override
+    {
+        return Array::get(ndx);
+    }
     // Disable copying, this is not allowed.
     ArrayInteger& operator=(const ArrayInteger&) = delete;
     ArrayInteger(const ArrayInteger&) = delete;
@@ -97,6 +100,11 @@ public:
     }
     void init_from_mem(MemRef) noexcept;
     void init_from_parent() noexcept;
+
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
+    }
 
     size_t size() const noexcept;
     bool is_empty() const noexcept;

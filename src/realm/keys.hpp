@@ -105,7 +105,7 @@ struct ColKey {
                  ((tag & 0xFFFFFFFFUL) << 30))
     {
     }
-    bool is_nullable()
+    bool is_nullable() const
     {
         return get_attrs().test(col_attr_Nullable);
     }

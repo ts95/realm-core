@@ -57,6 +57,10 @@ public:
     {
         Array::set_parent(parent, ndx_in_parent);
     }
+    Mixed get_any(size_t ndx) const override
+    {
+        return get(ndx);
+    }
     bool is_null(size_t) const
     {
         return false;
@@ -101,6 +105,10 @@ public:
     static util::Optional<bool> default_value(bool nullable)
     {
         return nullable ? util::none : util::some<bool>(false);
+    }
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
     }
     void set(size_t ndx, util::Optional<bool> value)
     {

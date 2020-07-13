@@ -56,6 +56,11 @@ public:
         init_from_ref(Array::get_ref_from_parent());
     }
 
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
+    }
+
     size_t size() const
     {
         return m_seconds.size();
@@ -130,7 +135,6 @@ inline size_t ArrayTimestamp::find_first(Timestamp value, size_t begin, size_t e
 template <>
 class QueryStateMin<Timestamp> : public QueryStateBase {
 public:
-    Timestamp m_state;
     QueryStateMin(size_t limit = -1)
         : QueryStateBase(limit)
     {
@@ -152,12 +156,18 @@ public:
         }
         return (m_limit > m_match_count);
     }
+    Timestamp get_min() const
+    {
+        return m_match_count ? m_state : Timestamp{};
+    }
+
+private:
+    Timestamp m_state;
 };
 
 template <>
 class QueryStateMax<Timestamp> : public QueryStateBase {
 public:
-    Timestamp m_state;
     QueryStateMax(size_t limit = -1)
         : QueryStateBase(limit)
     {
@@ -179,6 +189,13 @@ public:
         }
         return (m_limit > m_match_count);
     }
+    Timestamp get_max() const
+    {
+        return m_match_count ? m_state : Timestamp{};
+    }
+
+private:
+    Timestamp m_state;
 };
 
 template <>

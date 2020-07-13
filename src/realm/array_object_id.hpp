@@ -58,6 +58,11 @@ public:
         Array::set_parent(parent, ndx_in_parent);
     }
 
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
+    }
+
     size_t size() const
     {
         auto data_bytes = m_size - div_round_up<s_block_size>(m_size); // remove one byte per block.

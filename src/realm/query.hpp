@@ -347,8 +347,8 @@ private:
     template <typename TConditionFunction>
     Query& add_size_condition(ColKey column_key, int64_t value);
 
-    template <typename T, bool Nullable>
-    double average(ColKey column_key, size_t* resultcount = nullptr) const;
+    template <typename T, typename R = typename AggregateResultType<T, act_Average>::result_type>
+    R average(ColKey column_key, size_t* resultcount = nullptr) const;
 
     template <typename T>
     void aggregate(QueryStateBase& st, ColKey column_key, size_t* resultcount = nullptr,

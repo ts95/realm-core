@@ -47,6 +47,11 @@ public:
         m_arr->set_parent(parent, ndx_in_parent);
     }
 
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
+    }
+
     void update_parent()
     {
         m_arr->update_parent();

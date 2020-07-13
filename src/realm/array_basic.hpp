@@ -20,6 +20,7 @@
 #define REALM_ARRAY_BASIC_HPP
 
 #include <realm/array.hpp>
+#include <realm/column_type_traits.hpp>
 
 namespace realm {
 
@@ -48,6 +49,11 @@ public:
     void set_parent(ArrayParent* parent, size_t ndx_in_parent) noexcept override
     {
         Array::set_parent(parent, ndx_in_parent);
+    }
+
+    Mixed get_any(size_t ndx) const final
+    {
+        return get(ndx);
     }
 
     // Disable copying, this is not allowed.
@@ -197,20 +203,21 @@ public:
     void find_all_null(IntegerColumn* result, size_t add_offset = 0, size_t begin = 0, size_t end = npos) const;
 };
 
-template <class R>
+template <class T>
 class QueryStateSum : public QueryStateBase {
 public:
-    R m_state;
+    using ResultType = typename AggregateResultType<T, act_Sum>::result_type;
+    ResultType m_state;
     QueryStateSum(size_t limit = -1)
         : QueryStateBase(limit)
     {
-        m_state = R{};
+        m_state = ResultType{};
     }
     bool match(size_t, Mixed value) override
     {
         if (!value.is_null()) {
             ++m_match_count;
-            m_state += value.get<R>();
+            m_state += value.get<T>();
         }
         return (m_limit > m_match_count);
     }
@@ -223,7 +230,7 @@ public:
     QueryStateMin(size_t limit = -1)
         : QueryStateBase(limit)
     {
-        m_state = std::numeric_limits<R>::infinity();
+        m_state = std::numeric_limits<R>::max();
     }
     bool match(size_t index, Mixed value) override
     {
@@ -250,7 +257,7 @@ public:
     QueryStateMax(size_t limit = -1)
         : QueryStateBase(limit)
     {
-        m_state = -std::numeric_limits<R>::infinity();
+        m_state = std::numeric_limits<R>::lowest();
     }
     bool match(size_t index, Mixed value) override
     {
