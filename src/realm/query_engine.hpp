@@ -217,6 +217,7 @@ public:
     }
 
     virtual size_t find_first_local(size_t start, size_t end) = 0;
+    virtual size_t find_all_local(size_t start, size_t end);
 
     virtual size_t aggregate_local(QueryStateBase* st, size_t start, size_t end, size_t local_limit,
                                    ArrayPayload* source_column);
@@ -280,6 +281,7 @@ public:
     std::vector<ParentNode*> m_children;
     std::string m_condition_column_name;
     mutable ColKey m_condition_column_key = ColKey(); // Column of search criteria
+    ArrayPayload* m_source_column = nullptr;
 
     double m_dD;       // Average row distance between each local match at current position
     double m_dT = 0.0; // Time overhead of testing index i + 1 if we have just tested index i. > 1 for linear scans, 0
@@ -398,6 +400,32 @@ protected:
         m_dD = _impl::CostHeuristic<LeafType>::dD();
     }
 
+    bool run_single() const
+    {
+        if (m_source_column == nullptr)
+            return true;
+        // Compare leafs to see if they are the same
+        auto leaf = dynamic_cast<LeafType*>(m_source_column);
+        return leaf ? leaf->get_ref() == m_leaf_ptr->get_ref() : false;
+    }
+
+    template <class TConditionFunction>
+    size_t find_all_local(size_t start, size_t end)
+    {
+        if (run_single()) {
+            m_leaf_ptr->find(TConditionFunction::condition, m_value, start, end, 0, m_state);
+        }
+        else {
+            auto callback = [this](size_t index) {
+                auto val = m_source_column->get_any(index);
+                return m_state->match(index, val);
+            };
+            m_leaf_ptr->template find<TConditionFunction, act_CallbackIdx>(m_value, start, end, 0, m_state, callback);
+        }
+
+        return end;
+    }
+
     std::string describe(util::serializer::SerialisationState& state) const override
     {
         return state.describe_column(ParentNode::m_table, ColumnNodeBase::m_condition_column_key) + " " +
@@ -437,6 +465,11 @@ public:
     size_t find_first_local(size_t start, size_t end) override
     {
         return this->m_leaf_ptr->template find_first<TConditionFunction>(this->m_value, start, end);
+    }
+
+    size_t find_all_local(size_t start, size_t end) override
+    {
+        return BaseType::template find_all_local<TConditionFunction>(start, end);
     }
 
     std::string describe_condition() const override
@@ -558,6 +591,11 @@ public:
         }
 
         return s;
+    }
+
+    size_t find_all_local(size_t start, size_t end) override
+    {
+        return BaseType::template find_all_local<Equal>(start, end);
     }
 
     std::string describe(util::serializer::SerialisationState& state) const override
@@ -2108,14 +2146,14 @@ public:
             if (std::is_same<TConditionValue, int64_t>::value) {
                 // For int64_t we've created an array intrinsics named compare_leafs which template expands bitwidths
                 // of boths arrays to make Get faster.
-                QueryState<int64_t> qs(act_ReturnFirst);
+                QueryStateFindFirst qs;
                 bool resume = m_leaf_ptr1->template compare_leafs<TConditionFunction, act_ReturnFirst>(
                     m_leaf_ptr2, start, end, 0, &qs, CallbackDummy());
 
                 if (resume)
                     s = end;
                 else
-                    return to_size_t(qs.m_state);
+                    return qs.m_state;
             }
             else {
 // This is for float and double.
