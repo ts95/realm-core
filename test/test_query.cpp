@@ -22,6 +22,9 @@
 #include <cstdlib> // itoa()
 #include <limits>
 #include <vector>
+#include <chrono>
+
+using namespace std::chrono;
 
 #include <realm.hpp>
 #include <realm/column_integer.hpp>
@@ -37,6 +40,14 @@ using namespace realm;
 using namespace realm::util;
 using namespace realm::test_util;
 
+// #include <valgrind/callgrind.h>
+#ifndef CALLGRIND_START_INSTRUMENTATION
+#define CALLGRIND_START_INSTRUMENTATION
+#endif
+
+#ifndef CALLGRIND_STOP_INSTRUMENTATION
+#define CALLGRIND_STOP_INSTRUMENTATION
+#endif
 
 // Test independence and thread-safety
 // -----------------------------------
@@ -5141,6 +5152,55 @@ TEST(Query_Sort_And_Requery_Untyped_Monkey2)
             foreignindex = foreignindex2;
         }
     }
+}
+
+TEST(Query_IntPerformance)
+{
+    Table table;
+    auto col_1 = table.add_column(type_Int, "1");
+    auto col_2 = table.add_column(type_Int, "2");
+
+    for (int i = 0; i < 1000; i++) {
+        Obj o = table.create_object().set(col_1, i).set(col_2, i == 500 ? 500 : 2);
+    }
+
+    Query q1 = table.where().equal(col_2, 2);
+    Query q2 = table.where().not_equal(col_1, 500);
+
+    auto t1 = steady_clock::now();
+
+    CALLGRIND_START_INSTRUMENTATION;
+
+    size_t nb_reps = 1000;
+    for (size_t t = 0; t < nb_reps; t++) {
+        TableView tv = q1.find_all();
+        CHECK_EQUAL(tv.size(), 999);
+    }
+
+    auto t2 = steady_clock::now();
+
+    for (size_t t = 0; t < nb_reps; t++) {
+        TableView tv = q2.find_all();
+        CHECK_EQUAL(tv.size(), 999);
+    }
+
+    auto t3 = steady_clock::now();
+
+    for (size_t t = 0; t < nb_reps; t++) {
+        auto sum = q2.sum_int(col_2);
+        CHECK_EQUAL(sum, 1998);
+    }
+
+    CALLGRIND_STOP_INSTRUMENTATION;
+
+    auto t4 = steady_clock::now();
+
+    std::cout << nb_reps << " repetitions in Query_IntPerformance" << std::endl;
+    std::cout << "    time equal: " << duration_cast<nanoseconds>(t2 - t1).count() / nb_reps << " ns/rep"
+              << std::endl;
+    std::cout << "    time not_equal: " << duration_cast<nanoseconds>(t3 - t2).count() / nb_reps << " ns/rep"
+              << std::endl;
+    std::cout << "    time sum: " << duration_cast<nanoseconds>(t4 - t3).count() / nb_reps << " ns/rep" << std::endl;
 }
 
 #endif // TEST_QUERY
