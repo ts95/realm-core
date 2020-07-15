@@ -137,7 +137,6 @@ const size_t probe_matches = 4;
 
 const size_t bitwidth_time_unit = 64;
 
-typedef bool (*CallbackDummy)(int64_t);
 using Evaluator = util::FunctionRef<bool(ConstObj& obj)>;
 
 class ParentNode {
@@ -413,14 +412,14 @@ protected:
     size_t find_all_local(size_t start, size_t end)
     {
         if (run_single()) {
-            m_leaf_ptr->find(TConditionFunction::condition, m_value, start, end, 0, m_state);
+            m_leaf_ptr->template find<TConditionFunction>(m_value, start, end, 0, m_state, nullptr);
         }
         else {
             auto callback = [this](size_t index) {
                 auto val = m_source_column->get_any(index);
                 return m_state->match(index, val);
             };
-            m_leaf_ptr->template find<TConditionFunction, act_CallbackIdx>(m_value, start, end, 0, m_state, callback);
+            m_leaf_ptr->template find<TConditionFunction>(m_value, start, end, 0, m_state, callback);
         }
 
         return end;
@@ -2147,8 +2146,8 @@ public:
                 // For int64_t we've created an array intrinsics named compare_leafs which template expands bitwidths
                 // of boths arrays to make Get faster.
                 QueryStateFindFirst qs;
-                bool resume = m_leaf_ptr1->template compare_leafs<TConditionFunction, act_ReturnFirst>(
-                    m_leaf_ptr2, start, end, 0, &qs, CallbackDummy());
+                bool resume =
+                    m_leaf_ptr1->template compare_leafs<TConditionFunction>(m_leaf_ptr2, start, end, 0, &qs, nullptr);
 
                 if (resume)
                     s = end;
