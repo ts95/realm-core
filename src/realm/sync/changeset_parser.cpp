@@ -336,6 +336,9 @@ void ChangesetParser::State::parse_one()
             if (instr.type == Instruction::Payload::Type::Link) {
                 instr.link_target_table = read_intern_string();
             }
+            if (instr.collection_type == Instruction::AddColumn::CollectionType::Dictionary) {
+                instr.value_type = read_payload_type();
+            }
             m_handler(instr);
             return;
         }
