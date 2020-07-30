@@ -13,6 +13,7 @@ let package = Package(
     products: [
         .library(
             name: "RealmCore",
+            type: .dynamic,
             targets: ["RealmCore"]),
     ],
     targets: [
